@@ -3,7 +3,7 @@ load_dotenv()
 
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
-from app.routers import steam_routes, igdb_routes
+from app.routers import auth_routes, igdb_routes
 
 
 app = FastAPI(
@@ -20,7 +20,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(steam_routes.router)
+app.include_router(auth_routes.router)
 app.include_router(igdb_routes.router)
 
 @app.get("/")

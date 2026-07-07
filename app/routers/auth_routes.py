@@ -2,6 +2,7 @@ import secrets
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse, JSONResponse
 from app.steam_auth import steam_openid, create_token
+from providers.igdb_provider import IGDBRateLimitException, igdb_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 pending_auth_payloads: dict[str, dict] = {}
@@ -12,7 +13,6 @@ async def steam_login():
 
 @router.get("/steam/callback")
 async def steam_callback(request: Request):
-    # Use raw query to preserve exact percent-encoding
     raw_query = request.url.query
     if not raw_query:
         return JSONResponse(status_code=400, content={"error": "missing query"})
@@ -22,13 +22,26 @@ async def steam_callback(request: Request):
         return JSONResponse(status_code=401, content={"error": "verification failed"})
 
     try:
-        payload = await create_token(steamid)
+        steam_payload = await create_token(steamid)
     except Exception as e:
-        # Return a JSON error instead of letting an unhandled exception produce HTTP 500
         return JSONResponse(status_code=500, content={"error": "payload_creation_failed", "detail": str(e)})
 
+    seeds = steam_payload["games"]
+
+    try:
+        games_data = await igdb_service.multiquery_games(seeds)
+    except IGDBRateLimitException as e:
+        return JSONResponse(status_code=429, content={"error": str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": "igdb_enrichment_failed", "detail": str(e)})
+
+    matched_games = [g for g in games_data if g.get("igdb_id") is not None]
+
     session_token = secrets.token_urlsafe(16)
-    pending_auth_payloads[session_token] = payload
+    pending_auth_payloads[session_token] = {
+        "steamid": steam_payload["steamid"],
+        "games": matched_games,
+    }
 
     return RedirectResponse(url=f"gamelog://auth/complete#session={session_token}")
 

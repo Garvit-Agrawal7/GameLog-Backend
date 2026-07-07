@@ -30,7 +30,7 @@ class IGDBService:
             raise RuntimeError("IGDB client credentials are not configured")
         return client_id, client_secret
 
-    async def _ensure_access_token(self) -> str:
+    async def _get_access_token(self) -> str:
         if self._access_token and time.monotonic() < self._token_expires_at:
             return self._access_token
 
@@ -63,7 +63,7 @@ class IGDBService:
             return access_token
 
     async def _post(self, path: str, query: str) -> list[dict[str, Any]]:
-        token = await self._ensure_access_token()
+        token = await self._get_access_token()
         client_id, _ = self._require_credentials()
 
         response = await self._client.post(
@@ -95,6 +95,7 @@ class IGDBService:
         igdb_query = (
             f'search "{escaped_query}"; '
             'fields name,summary,cover.image_id,genres.name,first_release_date,rating,rating_count; '
+            'where game_type = (0,8,9,10); '
             f'limit {limit};'
         )
         return await self._post("/games", igdb_query)
@@ -158,6 +159,67 @@ class IGDBService:
         )
         games = await self._post("/games", igdb_query)
         return self._calculate_rating_order(games, minimum_votes=50)[:limit]
+
+    async def multiquery_games(self, seeds: list[dict]) -> list[dict]:
+        """
+        Batch-fetch IGDB data for Steam game seeds via IGDB's multiquery
+        endpoint, chunked to stay under IGDB's per-request sub-query limit.
+        """
+        chunk_size = 10
+        if not seeds:
+            return []
+
+        all_results: list[dict] = []
+        for chunk_start in range(0, len(seeds), chunk_size):
+            chunk = seeds[chunk_start:chunk_start + chunk_size]
+
+            query_blocks = []
+            for i, seed in enumerate(chunk):
+                name_escaped = seed["name"].replace('"', '\\"')
+                if name_escaped == "Grand Theft Auto V Legacy":
+                    name_escaped = "Grand Theft Auto V"
+                query_blocks.append(
+                    f'query games "{i}" {{'
+                    f'fields name,summary,cover.image_id,genres.name,first_release_date,rating,rating_count; '
+                    f'where name = "{name_escaped}" & game_type = (0,8,9,10);'
+                    f'sort rating_count desc;'
+                    f'limit 10;'
+                    f'}};'
+                )
+
+            multiquery_body = "\n".join(query_blocks)
+
+            chunk_results = await self._post("/multiquery", multiquery_body)
+
+            for i, seed in enumerate(chunk):
+                result_block = next((r for r in chunk_results if r.get("name") == str(i)), None)
+                candidates = result_block.get("result", []) if result_block else []
+
+                game = self._pick_best_match(seed["name"], candidates)
+
+                if game:
+                    cover_id = self._read_cover_id(game)
+                    all_results.append({
+                        "steam_name": seed["name"],
+                        "playtime_forever": seed.get("playtime_forever"),
+                        "rtime_last_played": seed.get("rtime_last_played"),
+                        "igdb_id": game.get("id"),
+                        "igdb_name": game.get("name"),
+                        "cover_url": self._cover_url(cover_id) if cover_id else None,
+                        "summary": game.get("summary"),
+                        "genres": self._read_genres(game),
+                        "release_date": game.get("first_release_date"),
+                        "rating": game.get("rating"),
+                    })
+                else:
+                    all_results.append({
+                        "steam_name": seed["name"],
+                        "playtime_forever": seed.get("playtime_forever"),
+                        "rtime_last_played": seed.get("rtime_last_played"),
+                        "igdb_id": None,
+                    })
+
+        return all_results
 
     async def enrich_games(self, seeds: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not seeds:
@@ -246,7 +308,7 @@ class IGDBService:
                 )
             )
         query = "\n\n".join(buffer)
-        token = await self._ensure_access_token()
+        token = await self._get_access_token()
         client_id, _ = self._require_credentials()
 
         response = await self._client.post(

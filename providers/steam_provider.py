@@ -9,6 +9,73 @@ class SteamService:
         self._api_key = settings.steam_api_key
         self._client = httpx.AsyncClient(base_url=self.BASE_URL)
 
+    @staticmethod
+    def _normalize_name(name: str) -> str:
+        """Keep letters, digits, and spaces only, then collapse whitespace."""
+
+        if not isinstance(name, str):
+            return ""
+
+        cleaned = "".join(
+            ch if (ch.isalpha() or ch.isdigit() or ch.isspace()) else " "
+            for ch in name
+        )
+        return " ".join(cleaned.split())
+
+    @staticmethod
+    def _extract_games(container: dict | None) -> list[dict]:
+        if not isinstance(container, dict):
+            return []
+        return container.get("response", {}).get("games", []) or []
+
+    def trim_steam_games(self, steamid: int | str, games_response: dict,) -> dict:
+        """
+        Trim the nested Steam games response into a compact format.
+
+        Keeps owned games, keeps free games only when playtime is at least 60,
+        and returns a normalized list with just the fields the frontend needs.
+        """
+
+        owned_games = self._extract_games(games_response.get("ownedGames"))
+        free_games = self._extract_games(games_response.get("freeGames"))
+
+        trimmed_games: list[dict] = []
+
+        for game in owned_games:
+            if not isinstance(game, dict):
+                continue
+
+            playtime = game.get("playtime_forever", 0) or 0
+            trimmed_games.append(
+                {
+                    "name": self._normalize_name(game.get("name", "")),
+                    "playtime_forever": round(playtime / 60, 2),
+                    "rtime_last_played": game.get("rtime_last_played", 0),
+                }
+            )
+
+        for game in free_games:
+            if not isinstance(game, dict):
+                continue
+
+            playtime = game.get("playtime_forever", 0) or 0
+            if playtime < 60:
+                continue
+
+            trimmed_games.append(
+                {
+                    "name": self._normalize_name(game.get("name", "")),
+                    "playtime_forever": round(playtime / 60, 2),
+                    "rtime_last_played": game.get("rtime_last_played", 0),
+                }
+            )
+
+        return {
+            "steamid": str(steamid),
+            "game_count": len(trimmed_games),
+            "games": trimmed_games,
+        }
+
     async def get_player_summaries(self, steam_id: str) -> dict:
         url = "/ISteamUser/GetPlayerSummaries/v0002/"
         params = {"key": self._api_key, "steamids": steam_id}
@@ -64,3 +131,6 @@ class SteamService:
 
     async def close(self):
         await self._client.aclose()
+
+
+steam_service = SteamService()

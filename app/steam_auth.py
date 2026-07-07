@@ -1,82 +1,20 @@
 from app.config import settings
-from providers.steam_provider import SteamService
+from providers.steam_provider import steam_service
 import httpx
 import re
 from urllib.parse import urlencode, parse_qsl
 
-STEAM_ID_PATTERN = re.compile(r"^https://steamcommunity\.com/openid/id/(\d+)$")
-
-steam_service = SteamService()
-
-
-def normalize_name(name: str) -> str:
-    """Keep letters, digits, and spaces only, then collapse whitespace."""
-
-    if not isinstance(name, str):
-        return ""
-
-    cleaned = "".join(ch if (ch.isalpha() or ch.isdigit() or ch.isspace()) else " " for ch in name)
-    return " ".join(cleaned.split())
-
-
-def trim_steam_games(steamid: int | str, games_response: dict) -> dict:
-    """Trim the nested Steam games response into a compact payload.
-
-    Keeps owned games, keeps free games only when playtime is at least 60,
-    and returns a normalized list with just the fields the frontend needs.
-    """
-
-    def _extract_games(container: dict | None) -> list[dict]:
-        if not isinstance(container, dict):
-            return []
-        return container.get("response", {}).get("games", []) or []
-
-    owned_games = _extract_games(games_response.get("ownedGames"))
-    free_games = _extract_games(games_response.get("freeGames"))
-
-    trimmed_games: list[dict] = []
-
-    for game in owned_games:
-        if not isinstance(game, dict):
-            continue
-
-        playtime = game.get("playtime_forever", 0) or 0
-        trimmed_games.append(
-            {
-                "name": normalize_name(game.get("name", "")),
-                "playtime_forever": round(playtime / 60, 2),
-                "rtime_last_played": game.get("rtime_last_played", 0),
-            }
-        )
-
-    for game in free_games:
-        if not isinstance(game, dict):
-            continue
-
-        playtime = game.get("playtime_forever", 0) or 0
-        if playtime < 60:
-            continue
-
-        trimmed_games.append(
-            {
-                "name": normalize_name(game.get("name", "")),
-                "playtime_forever": round(playtime / 60, 2),
-                "rtime_last_played": game.get("rtime_last_played", 0),
-            }
-        )
-
-    return {
-        "steamid": str(steamid),
-        "game_count": len(trimmed_games),
-        "games": trimmed_games,
-    }
-
+# Pattern to extract Steam ID from OpenID
+STEAM_ID_PATTERN = re.compile(r"https?://steamcommunity\.com/openid/id/(\d+)")
 
 async def create_token(steamid: int) -> dict:
     """Create a trimmed payload with steamid and game summary data."""
 
     games_response = await steam_service.get_owned_games(str(steamid))
-    return trim_steam_games(steamid, games_response if isinstance(games_response, dict) else {})
+    return steam_service.trim_steam_games(
+        steamid,
+        games_response if isinstance(games_response, dict) else {},
+    )
 
 class SteamOpenID:
     def __init__(self):
