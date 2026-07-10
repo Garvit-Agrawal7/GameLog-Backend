@@ -2,8 +2,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI
-from starlette.middleware.cors import CORSMiddleware
-from app.routers import auth_routes, igdb_routes
+from fastapi.middleware.cors import CORSMiddleware
+from app.routers import steam_routes, igdb_routes, auth_routes, database_routes
 
 
 app = FastAPI(
@@ -13,17 +13,18 @@ app = FastAPI(
 )
 
 app.add_middleware(
-    CORSMiddleware,  # type: ignore[arg-type]
+    CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+app.include_router(steam_routes.router)
 app.include_router(auth_routes.router)
 app.include_router(igdb_routes.router)
+app.include_router(database_routes.router)
 
 @app.get("/")
 async def root():
     return {"message": "Game Library Backend", "status": "running"}
-

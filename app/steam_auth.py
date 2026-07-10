@@ -1,5 +1,5 @@
 from app.config import settings
-from providers.steam_provider import steam_service
+from services.steam_service import steam_service
 import httpx
 import re
 from urllib.parse import urlencode, parse_qsl
@@ -7,7 +7,7 @@ from urllib.parse import urlencode, parse_qsl
 # Pattern to extract Steam ID from OpenID
 STEAM_ID_PATTERN = re.compile(r"https?://steamcommunity\.com/openid/id/(\d+)")
 
-async def create_token(steamid: int) -> dict:
+async def create_steam_payload(steamid: int) -> dict:
     """Create a trimmed payload with steamid and game summary data."""
 
     games_response = await steam_service.get_owned_games(str(steamid))

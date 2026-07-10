@@ -1,11 +1,12 @@
 from typing import Any
 
-from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from providers.igdb_provider import IGDBRateLimitException, igdb_service
+from app.auth import current_enabled_user
+from services.igdb_service import IGDBRateLimitException, igdb_service
 
-router = APIRouter(prefix="/igdb", tags=["igdb"])
+router = APIRouter(prefix="/igdb", tags=["igdb"], dependencies=[Depends(current_enabled_user)])
 
 
 @router.get("/search")

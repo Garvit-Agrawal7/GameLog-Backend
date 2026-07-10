@@ -1,5 +1,7 @@
 fastapi==0.139.0
-uvicorn[standard]==0.50.0
-python-jose[cryptography]==3.5.0
 httpx==0.28.1
 python-dotenv==1.2.2
+fastapi-users[sqlalchemy]==15.0.5
+fastapi-users-db-sqlalchemy==7.0.0
+sqlalchemy==2.0.51
+alembic==1.14.1
