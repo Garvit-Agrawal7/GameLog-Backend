@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import sys
 from logging.config import fileConfig
 
 from alembic import context
 from dotenv import load_dotenv
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import async_engine_from_config
+from sqlalchemy import create_engine
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 load_dotenv()
 
@@ -60,16 +64,15 @@ async def run_async_migrations() -> None:
     alembic_config = config.get_section(config.config_ini_section) or {}
     alembic_config["sqlalchemy.url"] = _normalize_database_url(settings.database_url)
 
-    connectable = async_engine_from_config(
-        alembic_config,
-        prefix="sqlalchemy.",
+    connectable = create_engine(
+        alembic_config["sqlalchemy.url"],
         poolclass=pool.NullPool,
     )
 
-    async with connectable.connect() as connection:
-        await connection.run_sync(do_run_migrations)
+    with connectable.connect() as connection:
+        do_run_migrations(connection)
 
-    await connectable.dispose()
+    connectable.dispose()
 
 
 if context.is_offline_mode():

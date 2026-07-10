@@ -5,3 +5,5 @@ fastapi-users[sqlalchemy]==15.0.5
 fastapi-users-db-sqlalchemy==7.0.0
 sqlalchemy==2.0.51
 alembic==1.14.1
+
+pydantic

@@ -1,15 +1,20 @@
-from fastapi_users_db_sqlalchemy import SQLAlchemyBaseUserTableUUID
 from uuid import UUID
+from datetime import datetime
 
-from sqlalchemy import JSON, ForeignKey, String, Text
+from sqlalchemy import Boolean, JSON, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
 
 
-class User(SQLAlchemyBaseUserTableUUID, Base):
+class User(Base):
     __tablename__ = "users"
 
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(320), unique=True, index=True, nullable=False)
+    hashed_password: Mapped[str] = mapped_column(String(1024), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_superuser: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     username: Mapped[str] = mapped_column(String(150), unique=True, index=True, nullable=False)
 
 
@@ -31,3 +36,29 @@ class UserLibraryGame(Base):
     year: Mapped[int] = mapped_column(nullable=False, default=0)
     in_library: Mapped[bool] = mapped_column(nullable=False, default=True)
     last_updated: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class PasswordResetSession(Base):
+    __tablename__ = "password_reset_sessions"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    original_token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    reset_code_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    password_fingerprint: Mapped[str] = mapped_column(String(255), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class PendingSignup(Base):
+    __tablename__ = "pending_signups"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(320), unique=True, index=True, nullable=False)
+    username: Mapped[str] = mapped_column(String(150), unique=True, index=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(1024), nullable=False)
+    code_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

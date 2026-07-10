@@ -1,17 +1,24 @@
 from pydantic import BaseModel
-from fastapi_users import schemas
 from uuid import UUID
 
 
-class UserRead(schemas.BaseUser[UUID]):
+class UserRead(BaseModel):
+    id: UUID
+    email: str
+    is_active: bool
+    is_superuser: bool
     username: str
 
 
-class UserCreate(schemas.BaseUserCreate):
+class UserCreate(BaseModel):
+    email: str
+    password: str
     username: str
 
 
-class UserUpdate(schemas.BaseUserUpdate):
+class UserUpdate(BaseModel):
+    email: str | None = None
+    password: str | None = None
     username: str | None = None
 
 
@@ -26,6 +33,10 @@ class LoginResponse(BaseModel):
     user: UserRead
 
 
+class SignupResponse(BaseModel):
+    message: str
+
+
 class ForgotPasswordRequest(BaseModel):
     email: str
 
@@ -33,6 +44,11 @@ class ForgotPasswordRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     token: str
     password: str
+
+
+class VerifyEmailRequest(BaseModel):
+    email: str
+    code: str
 
 
 class LibraryGame(BaseModel):

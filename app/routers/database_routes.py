@@ -56,7 +56,6 @@ async def get_user_details(
         email=user.email,
         is_active=user.is_active,
         is_superuser=user.is_superuser,
-        is_verified=user.is_verified,
         username=user.username,
         library=library,
     )

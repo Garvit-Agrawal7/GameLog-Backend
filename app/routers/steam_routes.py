@@ -4,6 +4,8 @@ from time import monotonic
 
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse, JSONResponse
+
+from app.config import settings
 from app.steam_auth import steam_openid, create_steam_payload
 from services.igdb_service import IGDBRateLimitException, igdb_service
 
@@ -68,7 +70,7 @@ async def steam_callback(request: Request):
         "games": matched_games,
     }
 
-    return RedirectResponse(url=f"gamelog://auth/complete#session={session_token}")
+    return RedirectResponse(url=f"{settings.frontend_url}auth/complete#session={session_token}")
 
 @router.get("/session/{session_token}")
 async def get_session_payload(session_token: str):

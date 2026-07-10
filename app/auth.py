@@ -1,17 +1,21 @@
 from collections.abc import AsyncGenerator
-from uuid import UUID
+from datetime import UTC, datetime, timedelta
+import hashlib
+import secrets
+from uuid import UUID, uuid4
 
 from fastapi import Depends, HTTPException, status
 from fastapi import Request
 from fastapi_users import BaseUserManager, FastAPIUsers, UUIDIDMixin
+from fastapi_users.jwt import decode_jwt
 from fastapi_users.authentication import AuthenticationBackend, BearerTransport, JWTStrategy
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.email import send_reset_password_email
+from app.email import send_reset_password_email, send_verification_email
 from app.database import get_async_session
-from app.models import User
+from app.models import PasswordResetSession, PendingSignup, User
 
 
 async def get_user_db(session: AsyncSession = Depends(get_async_session)) -> AsyncGenerator[SQLAlchemyUserDatabase, None]:
@@ -30,6 +34,88 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, UUID]):
 
     async def on_after_reset_password(self, user: User, request: Request | None = None) -> None:
         return None
+
+
+def hash_reset_value(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def make_reset_code() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def make_verification_code() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def build_frontend_reset_url(reset_code: str) -> str:
+    return f"{settings.frontend_url}reset-password?code={reset_code}"
+
+
+async def validate_reset_token(user_manager: UserManager, token: str) -> tuple[User, str]:
+    try:
+        data = decode_jwt(
+            token,
+            user_manager.reset_password_token_secret,
+            [user_manager.reset_password_token_audience],
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token") from exc
+
+    try:
+        user_id = user_manager.parse_id(data["sub"])
+        password_fingerprint = data["password_fgpt"]
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token") from exc
+
+    user = await user_manager.get(user_id)
+    valid_fingerprint, _ = user_manager.password_helper.verify_and_update(user.hashed_password, password_fingerprint)
+    if not valid_fingerprint:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token")
+
+    return user, password_fingerprint
+
+
+async def create_reset_session(session: AsyncSession, user: User, password_fingerprint: str, original_token: str) -> str:
+    now = datetime.now(UTC)
+    reset_code = make_reset_code()
+    reset_session = PasswordResetSession(
+        id=uuid4(),
+        user_id=user.id,
+        original_token_hash=hash_reset_value(original_token),
+        reset_code_hash=hash_reset_value(reset_code),
+        password_fingerprint=password_fingerprint,
+        created_at=now,
+        expires_at=now + timedelta(minutes=15),
+        consumed_at=None,
+    )
+    session.add(reset_session)
+    await session.commit()
+    return reset_code
+
+
+async def create_pending_signup(
+    session: AsyncSession,
+    email: str,
+    username: str,
+    password_hash: str,
+) -> str:
+    now = datetime.now(UTC)
+    code = make_verification_code()
+    pending_signup = PendingSignup(
+        id=uuid4(),
+        email=email,
+        username=username,
+        password_hash=password_hash,
+        code_hash=hash_reset_value(code),
+        created_at=now,
+        expires_at=now + timedelta(minutes=15),
+        consumed_at=None,
+    )
+    session.add(pending_signup)
+    await session.commit()
+    send_verification_email(email, code)
+    return code
 
 
 async def get_user_manager(user_db=Depends(get_user_db)) -> AsyncGenerator[UserManager, None]:
