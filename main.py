@@ -4,16 +4,26 @@ load_dotenv()
 import asyncio
 import contextlib
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import steam_routes, igdb_routes, auth_routes, database_routes, xbox_routes
 from app.cleanup import cleanup_expired_auth_rows
+from app.rate_limit import rate_limiter
+
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await cleanup_expired_auth_rows()
+    redis_ready = await rate_limiter.ping()
+    if redis_ready:
+        logger.info("Redis rate limiting is available")
+    else:
+        logger.warning("Redis rate limiting is unavailable; falling back to in-memory throttling")
     cleanup_task = asyncio.create_task(_run_periodic_cleanup())
     try:
         yield

@@ -14,6 +14,12 @@ class RedisRateLimiter:
         self._redis = Redis.from_url(settings.redis_url, decode_responses=True)
         self._fallback_requests: dict[str, deque[datetime]] = defaultdict(deque)
 
+    async def ping(self) -> bool:
+        try:
+            return bool(await self._redis.ping())
+        except RedisConnectionError:
+            return False
+
     async def allow(
         self,
         request: Request,
