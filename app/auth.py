@@ -10,6 +10,7 @@ from fastapi_users import BaseUserManager, FastAPIUsers, UUIDIDMixin
 from fastapi_users.jwt import decode_jwt
 from fastapi_users.authentication import AuthenticationBackend, BearerTransport, JWTStrategy
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -92,6 +93,29 @@ async def create_reset_session(session: AsyncSession, user: User, password_finge
     session.add(reset_session)
     await session.commit()
     return reset_code
+
+
+async def validate_reset_session(
+    session: AsyncSession,
+    reset_code: str,
+) -> PasswordResetSession:
+    reset_code_hash = hash_reset_value(reset_code)
+    result = await session.execute(select(PasswordResetSession).where(PasswordResetSession.reset_code_hash == reset_code_hash))
+    reset_session = result.scalar_one_or_none()
+    if reset_session is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset code")
+
+    if reset_session.consumed_at is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Reset code has already been used")
+
+    now = datetime.now(UTC)
+    expires_at = reset_session.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    if expires_at <= now:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Reset code has expired")
+
+    return reset_session
 
 
 async def create_pending_signup(

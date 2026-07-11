@@ -9,7 +9,7 @@ from alembic import context
 from dotenv import load_dotenv
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
-from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import create_async_engine
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -64,15 +64,15 @@ async def run_async_migrations() -> None:
     alembic_config = config.get_section(config.config_ini_section) or {}
     alembic_config["sqlalchemy.url"] = _normalize_database_url(settings.database_url)
 
-    connectable = create_engine(
+    connectable = create_async_engine(
         alembic_config["sqlalchemy.url"],
         poolclass=pool.NullPool,
     )
 
-    with connectable.connect() as connection:
-        do_run_migrations(connection)
+    async with connectable.connect() as connection:
+        await connection.run_sync(do_run_migrations)
 
-    connectable.dispose()
+    await connectable.dispose()
 
 
 if context.is_offline_mode():

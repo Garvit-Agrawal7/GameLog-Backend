@@ -1,12 +1,10 @@
 from uuid import UUID, uuid4
 
-from collections import defaultdict, deque
-from time import monotonic
 from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,9 +20,11 @@ from app.auth import (
     get_user_manager,
     hash_reset_value,
     validate_reset_token,
+    validate_reset_session,
 )
 from app.database import get_async_session
 from app.models import PasswordResetSession, PendingSignup, User
+from app.rate_limit import rate_limiter
 from app.schemas import (
     ForgotPasswordRequest,
     LoginRequest,
@@ -38,26 +38,13 @@ from app.schemas import (
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-_auth_requests: dict[str, deque[float]] = defaultdict(deque)
 _auth_window_seconds = 1.0
 _auth_max_requests = 2
 
 
-def _allow_auth_request(request: Request) -> bool:
-    client = request.client
-    client_ip = client.host if client else "unknown"
-    now = monotonic()
-    window_start = now - _auth_window_seconds
-    timestamps = _auth_requests[client_ip]
+async def _allow_auth_request(request: Request) -> bool:
+    return await rate_limiter.allow(request, "auth", _auth_window_seconds, _auth_max_requests)
 
-    while timestamps and timestamps[0] < window_start:
-        timestamps.popleft()
-
-    if len(timestamps) >= _auth_max_requests:
-        return False
-
-    timestamps.append(now)
-    return True
 
 router.include_router(
     fastapi_users.get_users_router(UserRead, UserUpdate),
@@ -71,7 +58,7 @@ async def signup(
     session: AsyncSession = Depends(get_async_session),
     user_manager=Depends(get_user_manager),
 ):
-    if not _allow_auth_request(request):
+    if not await _allow_auth_request(request):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many auth requests")
 
     existing = await session.execute(select(User).where((User.email == payload.email) | (User.username == payload.username)))
@@ -94,7 +81,7 @@ async def verify(
     payload: VerifyEmailRequest,
     session: AsyncSession = Depends(get_async_session),
 ):
-    if not _allow_auth_request(request):
+    if not await _allow_auth_request(request):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many auth requests")
 
     result = await session.execute(select(PendingSignup).where(PendingSignup.email == payload.email))
@@ -138,7 +125,7 @@ async def login(
     session: AsyncSession = Depends(get_async_session),
     user_manager=Depends(get_user_manager),
 ):
-    if not _allow_auth_request(request):
+    if not await _allow_auth_request(request):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many auth requests")
 
     result = await session.execute(select(User).where((User.email == payload.identifier) | (User.username == payload.identifier)))
@@ -168,7 +155,7 @@ async def forgot_password(
     session: AsyncSession = Depends(get_async_session),
     user_manager=Depends(get_user_manager),
 ):
-    if not _allow_auth_request(request):
+    if not await _allow_auth_request(request):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many auth requests")
 
     result = await session.execute(select(User).where(User.email == payload.email))
@@ -187,7 +174,7 @@ async def confirm_reset_password(
     session: AsyncSession = Depends(get_async_session),
     user_manager=Depends(get_user_manager),
 ):
-    if not _allow_auth_request(request):
+    if not await _allow_auth_request(request):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many auth requests")
 
     token_hash = hash_reset_value(token)
@@ -215,25 +202,14 @@ async def reset_password(
     session: AsyncSession = Depends(get_async_session),
     user_manager=Depends(get_user_manager),
 ):
-    if not _allow_auth_request(request):
+    if not await _allow_auth_request(request):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many auth requests")
 
-    reset_code_hash = hash_reset_value(payload.token)
-    result = await session.execute(select(PasswordResetSession).where(PasswordResetSession.reset_code_hash == reset_code_hash))
-    reset_session = result.scalar_one_or_none()
-    if reset_session is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset code")
+    if len(payload.password) < 6:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password must be at least 6 characters long")
 
-    if reset_session.consumed_at is not None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Reset code has already been used")
-
+    reset_session = await validate_reset_session(session, payload.token)
     now = datetime.now(UTC)
-    expires_at = reset_session.expires_at
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=UTC)
-    if expires_at <= now:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Reset code has expired")
-
     user = await user_manager.get(reset_session.user_id)
     valid_fingerprint, _ = user_manager.password_helper.verify_and_update(user.hashed_password, reset_session.password_fingerprint)
     if not valid_fingerprint:
@@ -258,7 +234,7 @@ async def disable_user(
     session: AsyncSession = Depends(get_async_session),
     _admin=Depends(current_enabled_superuser),
 ):
-    if not _allow_auth_request(request):
+    if not await _allow_auth_request(request):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many auth requests")
 
     result = await session.execute(select(User).where(User.id == user_id))

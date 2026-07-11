@@ -62,3 +62,23 @@ class PendingSignup(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class PendingAuthPayload(Base):
+    __tablename__ = "pending_auth_payloads"
+
+    session_token: Mapped[str] = mapped_column(String(64), primary_key=True)
+    steamid: Mapped[str] = mapped_column(String(32), nullable=False)
+    games: Mapped[list] = mapped_column(JSON, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RateLimitHit(Base):
+    __tablename__ = "rate_limit_hits"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    bucket: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    client_ip: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, nullable=False)
