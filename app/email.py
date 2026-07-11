@@ -1,27 +1,39 @@
 from pathlib import Path
+import logging
+
 from pydantic import NameEmail
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 
 from app.config import settings
 
 
-conf = ConnectionConfig(
-    MAIL_USERNAME=settings.smtp_username,
-    MAIL_PASSWORD=settings.smtp_password,
-    MAIL_FROM=settings.smtp_username,
-    MAIL_SERVER=settings.smtp_host,
-    MAIL_PORT=settings.smtp_port,
-    MAIL_STARTTLS=True,
-    MAIL_SSL_TLS=False,
-    USE_CREDENTIALS=True,
-    VALIDATE_CERTS=True,
-    TEMPLATE_FOLDER=Path("app/templates"),
-)
+logger = logging.getLogger(__name__)
+
+
+def _build_mail_client() -> FastMail | None:
+    if not settings.smtp_host or not settings.smtp_username or not settings.smtp_password:
+        return None
+
+    conf = ConnectionConfig(
+        MAIL_USERNAME=settings.smtp_username,
+        MAIL_PASSWORD=settings.smtp_password,
+        MAIL_FROM=settings.smtp_username,
+        MAIL_SERVER=settings.smtp_host,
+        MAIL_PORT=settings.smtp_port,
+        MAIL_STARTTLS=True,
+        MAIL_SSL_TLS=False,
+        USE_CREDENTIALS=True,
+        VALIDATE_CERTS=True,
+        TEMPLATE_FOLDER=Path("app/templates"),
+    )
+    return FastMail(conf)
 
 
 async def send_reset_password_email(to_email: str, token: str) -> None:
-    if not settings.smtp_host or not settings.smtp_username:
-        raise RuntimeError("SMTP is not configured")
+    fm = _build_mail_client()
+    if fm is None:
+        logger.warning("SMTP is not configured; skipping reset password email for %s", to_email)
+        return
 
     reset_link = (
         f"{settings.backend_url}/auth/reset-password/confirm?token={token}"
@@ -55,12 +67,13 @@ GameLog
         alternative_body=text_body,  # Plain-text fallback
     )
 
-    fm = FastMail(conf)
     await fm.send_message(message)
 
 async def send_verification_email(to_email: str, code: str) -> None:
-    if not settings.smtp_host or not settings.smtp_username:
-        raise RuntimeError("SMTP is not configured")
+    fm = _build_mail_client()
+    if fm is None:
+        logger.warning("SMTP is not configured; skipping verification email for %s", to_email)
+        return
 
     reset_template = Path("app/templates/verification_email.html").read_text(encoding="utf-8")
 
@@ -89,5 +102,4 @@ async def send_verification_email(to_email: str, code: str) -> None:
         alternative_body=text_body,  # Plain-text fallback
     )
 
-    fm = FastMail(conf)
     await fm.send_message(message)

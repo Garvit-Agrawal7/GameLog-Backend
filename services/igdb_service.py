@@ -27,7 +27,7 @@ class IGDBService:
         client_id = settings.igdb_client_id
         client_secret = settings.igdb_client_secret
         if not client_id or not client_secret:
-            raise RuntimeError("IGDB client credentials are not configured")
+            raise ValueError("IGDB client credentials are not configured")
         return client_id, client_secret
 
     async def _get_access_token(self) -> str:
@@ -90,6 +90,8 @@ class IGDBService:
         trimmed_query = query.strip()
         if not trimmed_query:
             return []
+        if not settings.igdb_client_id or not settings.igdb_client_secret:
+            return []
 
         escaped_query = trimmed_query.replace('"', '\\"')
         igdb_query = (
@@ -101,6 +103,8 @@ class IGDBService:
         return await self._post("/games", igdb_query)
 
     async def fetch_similar_games(self, game_id: int) -> list[dict[str, Any]]:
+        if not settings.igdb_client_id or not settings.igdb_client_secret:
+            return []
         igdb_query = (
             "fields similar_games.name,similar_games.summary,similar_games.cover.image_id,"
             "similar_games.genres.name,similar_games.first_release_date,similar_games.rating,"
@@ -123,6 +127,8 @@ class IGDBService:
         return self._calculate_rating_order(similar_games, minimum_votes=50)
 
     async def fetch_trending_games(self, limit: int = 10) -> list[dict[str, Any]]:
+        if not settings.igdb_client_id or not settings.igdb_client_secret:
+            return []
         year_start = int(dt.datetime.now().replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0).timestamp())
         igdb_query = (
             'fields name,summary,cover.image_id,genres.name,first_release_date,rating,rating_count; '
@@ -135,6 +141,8 @@ class IGDBService:
         return ranked[:limit]
 
     async def fetch_upcoming_games(self, limit: int = 10) -> list[dict[str, Any]]:
+        if not settings.igdb_client_id or not settings.igdb_client_secret:
+            return []
         now = int(dt.datetime.now().timestamp())
         year_end = int((dt.datetime.now() + dt.timedelta(days=365)).timestamp())
         igdb_query = (
@@ -148,6 +156,8 @@ class IGDBService:
     async def fetch_by_genre(self, genre: str, limit: int = 10) -> list[dict[str, Any]]:
         trimmed_genre = genre.strip()
         if not trimmed_genre:
+            return []
+        if not settings.igdb_client_id or not settings.igdb_client_secret:
             return []
 
         escaped_genre = trimmed_genre.replace('"', '\\"')
@@ -168,6 +178,8 @@ class IGDBService:
         chunk_size = 10
         if not seeds:
             return []
+        if not settings.igdb_client_id or not settings.igdb_client_secret:
+            return [{"steam_name": seed.get("name"), "playtime_forever": seed.get("playtime_forever"), "rtime_last_played": seed.get("rtime_last_played"), "igdb_id": None} for seed in seeds if isinstance(seed, dict)]
 
         all_results: list[dict] = []
         for chunk_start in range(0, len(seeds), chunk_size):
@@ -224,6 +236,8 @@ class IGDBService:
     async def enrich_games(self, seeds: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not seeds:
             return []
+        if not settings.igdb_client_id or not settings.igdb_client_secret:
+            return [seed for seed in seeds if isinstance(seed, dict)]
 
         normalized_seeds = [seed for seed in seeds if isinstance(seed, dict)]
         if not normalized_seeds:
@@ -264,6 +278,8 @@ class IGDBService:
             return await asyncio.gather(*(self._fetch_game_by_title(seed) for seed in normalized_seeds))
 
     async def fetch_time_to_beat(self, game_id: int) -> int | None:
+        if not settings.igdb_client_id or not settings.igdb_client_secret:
+            return None
         igdb_query = f"fields hastily; where game_id = {game_id}; limit 1;"
         items = await self._post("/game_time_to_beats", igdb_query)
         if not items:
