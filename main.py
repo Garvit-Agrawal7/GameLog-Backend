@@ -3,9 +3,12 @@ load_dotenv()
 
 import asyncio
 import contextlib
+import os
 from contextlib import asynccontextmanager
 import logging
 
+from alembic import command
+from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import steam_routes, igdb_routes, auth_routes, database_routes, xbox_routes
@@ -16,8 +19,14 @@ from app.rate_limit import rate_limiter
 logger = logging.getLogger(__name__)
 
 
+def _run_database_migrations() -> None:
+    alembic_cfg = Config(os.path.join(os.path.dirname(__file__), "alembic.ini"))
+    command.upgrade(alembic_cfg, "head")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _run_database_migrations()
     await cleanup_expired_auth_rows()
     redis_ready = await rate_limiter.ping()
     if redis_ready:
