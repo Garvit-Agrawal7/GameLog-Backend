@@ -30,7 +30,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, UUID]):
         return None
 
     async def on_after_forgot_password(self, user: User, token: str, request: Request | None = None) -> None:
-        send_reset_password_email(user.email, token)
+        await send_reset_password_email(user.email, token)
 
     async def on_after_reset_password(self, user: User, request: Request | None = None) -> None:
         return None
@@ -114,7 +114,7 @@ async def create_pending_signup(
     )
     session.add(pending_signup)
     await session.commit()
-    send_verification_email(email, code)
+    await send_verification_email(email, code)
     return code
 
 
