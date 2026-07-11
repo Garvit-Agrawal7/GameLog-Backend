@@ -3,9 +3,10 @@ from uuid import UUID, uuid4
 from collections import defaultdict, deque
 from time import monotonic
 from datetime import UTC, datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -196,7 +197,15 @@ async def confirm_reset_password(
 
     user, password_fingerprint = await validate_reset_token(user_manager, token)
     reset_code = await create_reset_session(session, user, password_fingerprint, token)
-    return RedirectResponse(url=build_frontend_reset_url(reset_code), status_code=status.HTTP_302_FOUND)
+    app_reset_url = build_frontend_reset_url(reset_code)
+
+    fallback_template = Path("app/templates/reset_password_fallback.html").read_text(encoding="utf-8")
+    fallback_html = (
+        fallback_template.replace("{{RESET_CODE}}", reset_code)
+        .replace("{{APP_RESET_URL}}", app_reset_url)
+    )
+
+    return HTMLResponse(content=fallback_html, status_code=status.HTTP_200_OK)
 
 
 @router.post("/reset-password")

@@ -26,7 +26,7 @@ async def send_reset_password_email(to_email: str, token: str) -> None:
     reset_link = (
         f"{settings.backend_url}/auth/reset-password/confirm?token={token}"
     )
-    reset_template = Path("app/templates/reset_password_template.html").read_text(
+    reset_template = Path("app/templates/reset_password_email.html").read_text(
         encoding="utf-8"
     )
 
@@ -62,7 +62,7 @@ async def send_verification_email(to_email: str, code: str) -> None:
     if not settings.smtp_host or not settings.smtp_username:
         raise RuntimeError("SMTP is not configured")
 
-    reset_template = Path("app/templates/verification_template.html").read_text(encoding="utf-8")
+    reset_template = Path("app/templates/verification_email.html").read_text(encoding="utf-8")
 
     html_body = reset_template.replace("{{CODE}}", code)
 
