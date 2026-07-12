@@ -3,6 +3,7 @@ import logging
 
 from pydantic import NameEmail
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
+from fastapi_mail.errors import ConnectionErrors
 
 from app.config import settings
 
@@ -67,7 +68,12 @@ GameLog
         alternative_body=text_body,  # Plain-text fallback
     )
 
-    await fm.send_message(message)
+    try:
+        await fm.send_message(message)
+    except ConnectionErrors:
+        logger.exception("SMTP connection failed while sending reset password email to %s", to_email)
+    except Exception:
+        logger.exception("Unexpected error while sending reset password email to %s", to_email)
 
 async def send_verification_email(to_email: str, code: str) -> None:
     fm = _build_mail_client()
@@ -102,4 +108,9 @@ async def send_verification_email(to_email: str, code: str) -> None:
         alternative_body=text_body,  # Plain-text fallback
     )
 
-    await fm.send_message(message)
+    try:
+        await fm.send_message(message)
+    except ConnectionErrors:
+        logger.exception("SMTP connection failed while sending verification email to %s", to_email)
+    except Exception:
+        logger.exception("Unexpected error while sending verification email to %s", to_email)
