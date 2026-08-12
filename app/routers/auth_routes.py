@@ -69,7 +69,7 @@ async def signup(
         select(PendingSignup).where((PendingSignup.email == payload.email) | (PendingSignup.username == payload.username))
     )
     if pending_existing.scalar_one_or_none() is not None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email or userid already pending verification")
+        return {"message": "Verification code sent"}
 
     password_hash = user_manager.password_helper.hash(payload.password)
     await create_pending_signup(session, payload.email, payload.username, password_hash)
