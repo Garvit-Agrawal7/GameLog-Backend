@@ -1,48 +1,60 @@
-from pathlib import Path
+import base64
 import logging
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from pathlib import Path
 
-from pydantic import NameEmail
-from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
-from fastapi_mail.errors import ConnectionErrors
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 from app.config import settings
-
 
 logger = logging.getLogger(__name__)
 
 
-def _build_mail_client() -> FastMail | None:
-    if not settings.smtp_host or not settings.smtp_username or not settings.smtp_password:
+def _build_gmail_service():
+    if not all([
+        settings.gmail_client_id,
+        settings.gmail_client_secret,
+        settings.gmail_refresh_token,
+    ]):
         return None
 
-    conf = ConnectionConfig(
-        MAIL_USERNAME=settings.smtp_username,
-        MAIL_PASSWORD=settings.smtp_password,
-        MAIL_FROM=settings.smtp_username,
-        MAIL_SERVER=settings.smtp_host,
-        MAIL_PORT=settings.smtp_port,
-        MAIL_STARTTLS=True,
-        MAIL_SSL_TLS=False,
-        USE_CREDENTIALS=True,
-        VALIDATE_CERTS=True,
-        TEMPLATE_FOLDER=Path("app/templates"),
+    creds = Credentials(
+        token=None,
+        refresh_token=settings.gmail_refresh_token,
+        client_id=settings.gmail_client_id,
+        client_secret=settings.gmail_client_secret,
+        token_uri="https://oauth2.googleapis.com/token",
+        scopes=["https://www.googleapis.com/auth/gmail.send"],
     )
-    return FastMail(conf)
+    creds.refresh(Request())
+    return build("gmail", "v1", credentials=creds)
+
+
+def _create_message(to_email: str, subject: str, html_body: str, text_body: str) -> dict:
+    message = MIMEMultipart("alternative")
+    message["to"] = to_email
+    message["from"] = settings.gmail_sender_email
+    message["subject"] = subject
+
+    message.attach(MIMEText(text_body, "plain"))
+    message.attach(MIMEText(html_body, "html"))
+
+    raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+    return {"raw": raw}
 
 
 async def send_reset_password_email(to_email: str, token: str) -> None:
-    fm = _build_mail_client()
-    if fm is None:
-        logger.warning("SMTP is not configured; skipping reset password email for %s", to_email)
+    service = _build_gmail_service()
+    if service is None:
+        logger.warning("Gmail API is not configured; skipping reset password email for %s", to_email)
         return
 
-    reset_link = (
-        f"{settings.backend_url}/auth/reset-password/confirm?token={token}"
-    )
-    reset_template = Path("app/templates/reset_password_email.html").read_text(
-        encoding="utf-8"
-    )
-
+    reset_link = f"{settings.backend_url}/auth/reset-password/confirm?token={token}"
+    reset_template = Path("app/templates/reset_password_email.html").read_text(encoding="utf-8")
     html_body = reset_template.replace("{{RESET_LINK}}", reset_link)
 
     text_body = f"""Reset Your Password
@@ -60,57 +72,45 @@ If you did not request a password reset, simply ignore this email. Your password
 GameLog
 """
 
-    message = MessageSchema(
-        subject="Reset your password",
-        recipients=[NameEmail(name="",email=to_email)],
-        body=html_body,
-        subtype=MessageType.html,
-        alternative_body=text_body,  # Plain-text fallback
-    )
+    body = _create_message(to_email, "Reset your password", html_body, text_body)
 
     try:
-        await fm.send_message(message)
-    except ConnectionErrors:
-        logger.exception("SMTP connection failed while sending reset password email to %s", to_email)
+        service.users().messages().send(userId="me", body=body).execute()
+    except HttpError:
+        logger.exception("Gmail API call failed while sending reset password email to %s", to_email)
     except Exception:
         logger.exception("Unexpected error while sending reset password email to %s", to_email)
 
+
 async def send_verification_email(to_email: str, code: str) -> None:
-    fm = _build_mail_client()
-    if fm is None:
-        logger.warning("SMTP is not configured; skipping verification email for %s", to_email)
+    service = _build_gmail_service()
+    if service is None:
+        logger.warning("Gmail API is not configured; skipping verification email for %s", to_email)
         return
 
     reset_template = Path("app/templates/verification_email.html").read_text(encoding="utf-8")
-
     html_body = reset_template.replace("{{CODE}}", code)
 
     text_body = f"""Verify Your Email
 
-    Welcome to GameLog!
+Welcome to GameLog!
 
-    Use the following One-Time Password (OTP) to verify your email address:
+Use the following One-Time Password (OTP) to verify your email address:
 
-    {code}
+{code}
 
-    This code expires in 10 minutes.
+This code expires in 10 minutes.
 
-    If you did not create a GameLog account, you can safely ignore this email.
+If you did not create a GameLog account, you can safely ignore this email.
 
-    GameLog
-    """
+GameLog
+"""
 
-    message = MessageSchema(
-        subject="Verify your email",
-        recipients=[NameEmail(name="", email=to_email)],
-        body=html_body,
-        subtype=MessageType.html,
-        alternative_body=text_body,  # Plain-text fallback
-    )
+    body = _create_message(to_email, "Verify your email", html_body, text_body)
 
     try:
-        await fm.send_message(message)
-    except ConnectionErrors:
-        logger.exception("SMTP connection failed while sending verification email to %s", to_email)
+        service.users().messages().send(userId="me", body=body).execute()
+    except HttpError:
+        logger.exception("Gmail API call failed while sending verification email to %s", to_email)
     except Exception:
         logger.exception("Unexpected error while sending verification email to %s", to_email)
