@@ -13,10 +13,10 @@ class Settings:
     secret_key: str = os.getenv("SECRET_KEY")
     database_url: str = os.getenv("DATABASE_URL")
     redis_url: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-    smtp_host: str = "smtp.gmail.com"
-    smtp_port: int = 587
-    smtp_username: str = os.getenv("SMTP_USERNAME")
-    smtp_password: str = os.getenv("SMTP_PASSWORD")
+    gmail_sender_email: str = os.getenv("GMAIL_SENDER_EMAIL")
+    gmail_client_id: str = os.getenv("GMAIL_CLIENT_ID")
+    gmail_client_secret: str = os.getenv("GMAIL_CLIENT_SECRET")
+    gmail_refresh_token: str = os.getenv("GMAIL_REFRESH_TOKEN")
     frontend_url: str = os.getenv("FRONTEND_URL")
 
 settings = Settings()
