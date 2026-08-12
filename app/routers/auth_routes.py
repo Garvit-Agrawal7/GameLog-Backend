@@ -139,7 +139,7 @@ async def login(
 
     verified, _ = user_manager.password_helper.verify_and_update(payload.password, user.hashed_password)
     if not verified:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid credentials")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     token = await get_jwt_strategy().write_token(user)
     return {
