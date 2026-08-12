@@ -14,7 +14,7 @@ from app.auth import (
     current_enabled_superuser,
     current_enabled_user,
     create_reset_session,
-    # create_pending_signup,
+    create_pending_signup,
     fastapi_users,
     get_jwt_strategy,
     get_user_manager,
@@ -65,99 +65,58 @@ async def signup(
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email or userid already exists")
 
-    # pending_existing = await session.execute(
-    #     select(PendingSignup).where((PendingSignup.email == payload.email) | (PendingSignup.username == payload.username))
-    # )
-    # if pending_existing.scalar_one_or_none() is not None:
-    #     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email or userid already pending verification")
+    pending_existing = await session.execute(
+        select(PendingSignup).where((PendingSignup.email == payload.email) | (PendingSignup.username == payload.username))
+    )
+    if pending_existing.scalar_one_or_none() is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email or userid already pending verification")
 
     password_hash = user_manager.password_helper.hash(payload.password)
-#     await create_pending_signup(session, payload.email, payload.username, password_hash)
-#     return {"message": "Verification code sent"}
-#
-# @router.post("/verify")
-# async def verify(
-#     request: Request,
-#     payload: VerifyEmailRequest,
-#     session: AsyncSession = Depends(get_async_session),
-# ):
-#     if not await _allow_auth_request(request):
-#         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many auth requests")
-#
-#     result = await session.execute(select(PendingSignup).where(PendingSignup.email == payload.email))
-#     pending_signup = result.scalar_one_or_none()
-#     if pending_signup is None:
-#         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid verification code")
-#
-#     code_hash = hash_reset_value(payload.code)
-#     if pending_signup.code_hash != code_hash:
-#         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid verification code")
-#
-#     if pending_signup.consumed_at is not None:
-#         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Verification code has already been used")
-#
-#     now = datetime.now(UTC)
-#     expires_at = pending_signup.expires_at
-#     if expires_at.tzinfo is None:
-#         expires_at = expires_at.replace(tzinfo=UTC)
-#     if expires_at <= now:
-#         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification code has expired")
+    await create_pending_signup(session, payload.email, payload.username, password_hash)
+    return {"message": "Verification code sent"}
+
+
+@router.post("/verify")
+async def verify(
+    request: Request,
+    payload: VerifyEmailRequest,
+    session: AsyncSession = Depends(get_async_session),
+):
+    if not await _allow_auth_request(request):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many auth requests")
+
+    result = await session.execute(select(PendingSignup).where(PendingSignup.email == payload.email))
+    pending_signup = result.scalar_one_or_none()
+    if pending_signup is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid verification code")
+
+    code_hash = hash_reset_value(payload.code)
+    if pending_signup.code_hash != code_hash:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid verification code")
+
+    if pending_signup.consumed_at is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Verification code has already been used")
+
+    now = datetime.now(UTC)
+    expires_at = pending_signup.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    if expires_at <= now:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification code has expired")
 
     user = User(
         id=uuid4(),
-        email=payload.email,
-        username=payload.username,
-        hashed_password=password_hash,
+        email=pending_signup.email,
+        username=pending_signup.username,
+        hashed_password=pending_signup.password_hash,
         is_active=True,
         is_superuser=False,
     )
-    # pending_signup.consumed_at = now
+    pending_signup.consumed_at = now
     session.add(user)
-    # await session.delete(pending_signup)
+    await session.delete(pending_signup)
     await session.commit()
-    return {"message": "Account created"}
-
-# @router.post("/verify")
-# async def verify(
-#     request: Request,
-#     payload: VerifyEmailRequest,
-#     session: AsyncSession = Depends(get_async_session),
-# ):
-#     if not await _allow_auth_request(request):
-#         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many auth requests")
-#
-#     result = await session.execute(select(PendingSignup).where(PendingSignup.email == payload.email))
-#     pending_signup = result.scalar_one_or_none()
-#     if pending_signup is None:
-#         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid verification code")
-#
-#     code_hash = hash_reset_value(payload.code)
-#     if pending_signup.code_hash != code_hash:
-#         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid verification code")
-#
-#     if pending_signup.consumed_at is not None:
-#         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Verification code has already been used")
-#
-#     now = datetime.now(UTC)
-#     expires_at = pending_signup.expires_at
-#     if expires_at.tzinfo is None:
-#         expires_at = expires_at.replace(tzinfo=UTC)
-#     if expires_at <= now:
-#         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification code has expired")
-#
-#     user = User(
-#         id=uuid4(),
-#         email=pending_signup.email,
-#         username=pending_signup.username,
-#         hashed_password=pending_signup.password_hash,
-#         is_active=True,
-#         is_superuser=False,
-#     )
-#     pending_signup.consumed_at = now
-#     session.add(user)
-#     await session.delete(pending_signup)
-#     await session.commit()
-#     return {"message": "Email verified and account created"}
+    return {"message": "Email verified and account created"}
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -200,12 +159,12 @@ async def forgot_password(
     if not await _allow_auth_request(request):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many auth requests")
 
-    # result = await session.execute(select(User).where(User.email == payload.email))
-    # user = result.scalar_one_or_none()
-    # if user is None:
-    #     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    #
-    # await user_manager.forgot_password(user, request=request)
+    result = await session.execute(select(User).where(User.email == payload.email))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    await user_manager.forgot_password(user, request=request)
     return {"message": "A password reset link was sent to your email"}
 
 
