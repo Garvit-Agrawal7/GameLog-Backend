@@ -12,7 +12,7 @@ class Settings:
     xbox_return_url: str = f"{os.getenv('BACKEND_URL')}/auth/xbox/callback"
     secret_key: str = os.getenv("SECRET_KEY")
     database_url: str = os.getenv("DATABASE_URL")
-    redis_url: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    redis_url: str = os.getenv("REDIS_URL")
     gmail_sender_email: str = os.getenv("GMAIL_SENDER_EMAIL")
     gmail_client_id: str = os.getenv("GMAIL_CLIENT_ID")
     gmail_client_secret: str = os.getenv("GMAIL_CLIENT_SECRET")

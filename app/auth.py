@@ -95,10 +95,7 @@ async def create_reset_session(session: AsyncSession, user: User, password_finge
     return reset_code
 
 
-async def validate_reset_session(
-    session: AsyncSession,
-    reset_code: str,
-) -> PasswordResetSession:
+async def validate_reset_session(session: AsyncSession, reset_code: str) -> PasswordResetSession:
     reset_code_hash = hash_reset_value(reset_code)
     result = await session.execute(select(PasswordResetSession).where(PasswordResetSession.reset_code_hash == reset_code_hash))
     reset_session = result.scalar_one_or_none()

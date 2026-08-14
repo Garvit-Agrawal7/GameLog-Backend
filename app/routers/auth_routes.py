@@ -12,7 +12,6 @@ from app.auth import (
     build_frontend_reset_url,
     current_active_user,
     current_enabled_superuser,
-    current_enabled_user,
     create_reset_session,
     create_pending_signup,
     fastapi_users,
@@ -24,7 +23,7 @@ from app.auth import (
 )
 from app.database import get_async_session
 from app.models import PasswordResetSession, PendingSignup, User
-from app.rate_limit import rate_limiter
+from app.rate_limit import allow_default_request, enforce_default_limit
 from app.schemas import (
     ForgotPasswordRequest,
     LoginRequest,
@@ -38,16 +37,11 @@ from app.schemas import (
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-_auth_window_seconds = 1.0
-_auth_max_requests = 2
-
-
-async def _allow_auth_request(request: Request) -> bool:
-    return await rate_limiter.allow(request, "auth", _auth_window_seconds, _auth_max_requests)
 
 
 router.include_router(
     fastapi_users.get_users_router(UserRead, UserUpdate),
+    dependencies=[Depends(enforce_default_limit)],
 )
 
 
@@ -58,7 +52,7 @@ async def signup(
     session: AsyncSession = Depends(get_async_session),
     user_manager=Depends(get_user_manager),
 ):
-    if not await _allow_auth_request(request):
+    if not await allow_default_request(request):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many auth requests")
 
     existing = await session.execute(select(User).where((User.email == payload.email) | (User.username == payload.username)))
@@ -82,7 +76,7 @@ async def verify(
     payload: VerifyEmailRequest,
     session: AsyncSession = Depends(get_async_session),
 ):
-    if not await _allow_auth_request(request):
+    if not await allow_default_request(request):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many auth requests")
 
     result = await session.execute(select(PendingSignup).where(PendingSignup.email == payload.email))
@@ -126,7 +120,7 @@ async def login(
     session: AsyncSession = Depends(get_async_session),
     user_manager=Depends(get_user_manager),
 ):
-    if not await _allow_auth_request(request):
+    if not await allow_default_request(request):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many auth requests")
 
     result = await session.execute(select(User).where((User.email == payload.identifier) | (User.username == payload.identifier)))
@@ -156,7 +150,7 @@ async def forgot_password(
     session: AsyncSession = Depends(get_async_session),
     user_manager=Depends(get_user_manager),
 ):
-    if not await _allow_auth_request(request):
+    if not await allow_default_request(request):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many auth requests")
 
     result = await session.execute(select(User).where(User.email == payload.email))
@@ -175,7 +169,7 @@ async def confirm_reset_password(
     session: AsyncSession = Depends(get_async_session),
     user_manager=Depends(get_user_manager),
 ):
-    if not await _allow_auth_request(request):
+    if not await allow_default_request(request):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many auth requests")
 
     token_hash = hash_reset_value(token)
@@ -203,7 +197,7 @@ async def reset_password(
     session: AsyncSession = Depends(get_async_session),
     user_manager=Depends(get_user_manager),
 ):
-    if not await _allow_auth_request(request):
+    if not await allow_default_request(request):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many auth requests")
 
     if len(payload.password) < 6:
@@ -224,7 +218,10 @@ async def reset_password(
 
 
 @router.get("/me", response_model=UserRead)
-async def read_current_user(current_user=Depends(current_active_user)):
+async def read_current_user(request: Request, current_user=Depends(current_active_user)):
+    if not await allow_default_request(request):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many auth requests")
+
     return current_user
 
 
@@ -235,7 +232,7 @@ async def disable_user(
     session: AsyncSession = Depends(get_async_session),
     _admin=Depends(current_enabled_superuser),
 ):
-    if not await _allow_auth_request(request):
+    if not await allow_default_request(request):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many auth requests")
 
     result = await session.execute(select(User).where(User.id == user_id))

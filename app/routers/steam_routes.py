@@ -8,29 +8,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_async_session
-from app.rate_limit import rate_limiter
+from app.rate_limit import allow_default_request
 from app.models import PendingAuthPayload
 from app.steam_auth import steam_openid, create_steam_payload
 from services.igdb_service import IGDBRateLimitException, igdb_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-_steam_login_window_seconds = 1.0
-_steam_login_max_requests = 2
 _pending_auth_ttl_seconds = 3600
 
 
-async def _allow_steam_login(request: Request) -> bool:
-    return await rate_limiter.allow(request, "steam_login", _steam_login_window_seconds, _steam_login_max_requests)
-
 @router.get("/steam/login")
 async def steam_login(request: Request, session: AsyncSession = Depends(get_async_session)):
-    if not await _allow_steam_login(request):
+    if not await allow_default_request(request):
         return JSONResponse(status_code=429, content={"error": "Too many steam login requests"})
     return RedirectResponse(url=steam_openid.get_login_url())
 
 @router.get("/steam/callback")
 async def steam_callback(request: Request, session: AsyncSession = Depends(get_async_session)):
-    if not await _allow_steam_login(request):
+    if not await allow_default_request(request):
         return JSONResponse(status_code=429, content={"error": "Too many steam callback requests"})
 
     raw_query = request.url.query

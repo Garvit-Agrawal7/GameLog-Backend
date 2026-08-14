@@ -1,15 +1,16 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import current_enabled_user
 from app.database import get_async_session
 from app.models import User, UserLibraryGame
+from app.rate_limit import allow_default_request, enforce_default_limit
 from app.schemas import LibraryGame, UserWithLibrary
 
-router = APIRouter(prefix="/database", tags=["database"])
+router = APIRouter(prefix="/database", tags=["database"], dependencies=[Depends(enforce_default_limit)])
 
 
 def _to_library_game(row: UserLibraryGame) -> LibraryGame:
@@ -41,8 +42,12 @@ async def _get_user_or_404(session: AsyncSession, user_id: UUID) -> User:
 @router.get("/users/{user_id}", response_model=UserWithLibrary)
 async def get_user_details(
     user_id: UUID,
+    request: Request,
     session: AsyncSession = Depends(get_async_session),
 ):
+    if not await allow_default_request(request):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many requests")
+
     user = await _get_user_or_404(session, user_id)
     library_result = await session.execute(
         select(UserLibraryGame)
@@ -64,8 +69,12 @@ async def get_user_details(
 @router.get("/users/{user_id}/library", response_model=list[LibraryGame])
 async def get_user_library(
     user_id: UUID,
+    request: Request,
     session: AsyncSession = Depends(get_async_session),
 ):
+    if not await allow_default_request(request):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many requests")
+
     await _get_user_or_404(session, user_id)
     result = await session.execute(
         select(UserLibraryGame)
@@ -79,9 +88,13 @@ async def get_user_library(
 async def replace_user_library(
     user_id: UUID,
     library: list[LibraryGame],
+    request: Request,
     current_user: User = Depends(current_enabled_user),
     session: AsyncSession = Depends(get_async_session),
 ):
+    if not await allow_default_request(request):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many requests")
+
     if user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only update your own library")
 

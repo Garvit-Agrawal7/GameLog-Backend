@@ -26,9 +26,7 @@ async def lifespan(app: FastAPI):
     await _ensure_database_schema()
     await cleanup_expired_auth_rows()
     redis_ready = await rate_limiter.ping()
-    if redis_ready:
-        logger.info("Redis rate limiting is available")
-    else:
+    if not redis_ready:
         logger.warning("Redis rate limiting is unavailable; falling back to in-memory throttling")
     cleanup_task = asyncio.create_task(_run_periodic_cleanup())
     try:
