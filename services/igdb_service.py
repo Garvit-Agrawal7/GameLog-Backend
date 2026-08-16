@@ -153,23 +153,23 @@ class IGDBService:
         )
         return await self._post("/games", igdb_query)
 
-    async def fetch_by_genre(self, genres: list[str], limit: int = 10) -> list[dict[str, Any]]:
-        trimmed_genres = [g.strip() for g in genres if g and g.strip()]
-        if not trimmed_genres:
+    async def fetch_by_genre(self, genre: str, limit: int = 10) -> list[dict[str, Any]]:
+        trimmed_genre = genre.strip()
+        if not trimmed_genre:
             return []
         if not settings.igdb_client_id or not settings.igdb_client_secret:
             return []
-    
-        escaped_genres = [g.replace('"', '\\"') for g in trimmed_genres]
-        genre_list = ",".join(f'"{g}"' for g in escaped_genres)
+
+        escaped_genre = trimmed_genre.replace('"', '\\"')
         igdb_query = (
             'fields name,summary,cover.image_id,genres.name,first_release_date,rating,rating_count; '
-            f'where genres.name = ({genre_list}) & rating != null & rating_count != null & game_type = (0,8,9); '
+            f'where genres.name = "{escaped_genre}" & rating != null & rating_count != null & game_type = (0,8,9); '
             'sort rating_count desc; '
             f'limit {limit};'
         )
         games = await self._post("/games", igdb_query)
         return self._calculate_rating_order(games, minimum_votes=50)[:limit]
+
 
     async def multiquery_games(self, seeds: list[dict]) -> list[dict]:
         """
@@ -505,5 +505,3 @@ class IGDBService:
 
 
 igdb_service = IGDBService()
-
-
