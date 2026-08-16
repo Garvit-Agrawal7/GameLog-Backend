@@ -153,7 +153,7 @@ class IGDBService:
         )
         return await self._post("/games", igdb_query)
 
-    async def fetch_by_genres(self, genres: list[str], limit: int = 10) -> list[dict[str, Any]]:
+    async def fetch_by_genre(self, genres: list[str], limit: int = 10) -> list[dict[str, Any]]:
         trimmed_genres = [g.strip() for g in genres if g and g.strip()]
         if not trimmed_genres:
             return []
