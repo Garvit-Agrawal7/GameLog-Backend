@@ -97,7 +97,7 @@ class IGDBService:
         igdb_query = (
             f'search "{escaped_query}"; '
             'fields name,summary,cover.image_id,genres.name,first_release_date,rating,rating_count; '
-            'where game_type = (0,8,9,10); '
+            'where game_type = (0,3,8,9,10); '
             f'limit {limit};'
         )
         return await self._post("/games", igdb_query)
