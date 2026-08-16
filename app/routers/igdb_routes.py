@@ -77,12 +77,14 @@ async def fetch_upcoming_games(request: Request, limit: int = Query(10, ge=1, le
 
 
 @router.get("/by-genre")
-async def fetch_by_genre(request: Request, genre: list[str] = Query(..., min_length=1), limit: int = Query(10, ge=1, le=100)):
-    cache_key = f"cache:igdb:by-genre:{','.join(sorted(genre))}:{limit}"
+async def fetch_by_genre(request: Request, genre: str = Query(..., min_length=1), limit: int = Query(10, ge=1, le=100)):
+    cache_key = f"cache:igdb:by-genre:{genre}:{limit}"
+
     async def fetch():
         if not await allow_igdb_request(request):
             raise IGDBRateLimitException("Too many IGDB requests")
         return await igdb_service.fetch_by_genre(genre, limit=limit)
+
     try:
         return await redis_cache.get_or_fetch(cache_key, fetch)
     except IGDBRateLimitException as e:
