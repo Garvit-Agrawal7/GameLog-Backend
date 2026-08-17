@@ -2,7 +2,7 @@ import asyncio
 import json
 import secrets
 import time
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
@@ -39,6 +39,7 @@ class RedisCache:
         self._release_lock = self._redis.register_script(RELEASE_LOCK_SCRIPT)
 
     async def get_or_fetch(self, cache_key: str, fetch_fn: Callable[[], Any], ttl: int = DEFAULT_TTL) -> Any:
+        """Get a value from cache or fetch it if not present."""
         try:
             cached = await self._redis.get(cache_key)
             if cached is not None:
@@ -50,6 +51,7 @@ class RedisCache:
         return await self._load_cache(cache_key, fetch_fn, ttl)
 
     async def _load_cache(self, cache_key: str, fetch_fn: Callable[[], Any], ttl: int) -> Any:
+        """Load the cache with locking to prevent stampedes."""
         lock_key = f"lock:{cache_key}"
         token = secrets.token_hex(8)
 
