@@ -97,7 +97,7 @@ class IGDBService:
         igdb_query = (
             f'search "{escaped_query}"; '
             'fields name,summary,cover.image_id,genres.name,first_release_date,rating,rating_count; '
-            'where game_type = (0,8,9,10); '
+            'where game_type = (0,3,8,9,10); '
             f'limit {limit};'
         )
         return await self._post("/games", igdb_query)
@@ -169,6 +169,7 @@ class IGDBService:
         )
         games = await self._post("/games", igdb_query)
         return self._calculate_rating_order(games, minimum_votes=50)[:limit]
+
 
     async def multiquery_games(self, seeds: list[dict]) -> list[dict]:
         """
@@ -504,5 +505,3 @@ class IGDBService:
 
 
 igdb_service = IGDBService()
-
-
