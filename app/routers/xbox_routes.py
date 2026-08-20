@@ -23,5 +23,23 @@ async def xbox_callback(request: Request, session: AsyncSession = Depends(get_as
     query_params = dict(request.query_params)
     if not query_params:
         return JSONResponse(status_code=400, content={"error": "missing query"})
+    code = query_params["code"]
+    try:
+        user_details = await xbox_auth.verify_login(code)
+    except ValueError as e:
+        msg = str(e)
+        if "timed out" in msg:
+            return JSONResponse(
+                status_code=504,
+                content={"error": "Xbox login timed out, please try again later"},
+            )
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Xbox login failed, please try again later"},
+        )
 
-    return JSONResponse(content={"message": "xbox callback received", "query_params": query_params})
+    app_key = user_details.app_key
+    xuid = user_details.xuid
+    
+
+    return JSONResponse(content={"message": "xbox callback received", "profile": user_details})

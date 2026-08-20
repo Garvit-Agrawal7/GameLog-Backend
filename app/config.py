@@ -4,6 +4,7 @@ class Settings:
     steam_api_key: str = os.getenv("STEAM_API_KEY")
     xbox_api_key: str = os.getenv("XBOX_API_KEY")
     xbox_public_key: str = os.getenv("XBOX_PUBLIC_KEY")
+    xbox_app_key: str = os.getenv("AZURE_APP_ID")
     igdb_client_id: str = os.getenv("IGDB_CLIENT_ID")
     igdb_client_secret: str = os.getenv("IGDB_CLIENT_SECRET")
     steam_openid_url: str = "https://steamcommunity.com/openid/login"
