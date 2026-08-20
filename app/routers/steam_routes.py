@@ -56,7 +56,7 @@ async def steam_callback(request: Request, session: AsyncSession = Depends(get_a
     session.add(
         PendingAuthPayload(
             session_token=session_token,
-            steamid=steam_payload["steamid"],
+            id=steam_payload["steamid"],
             games=matched_games,
             created_at=datetime.now(UTC),
             expires_at=datetime.now(UTC) + timedelta(seconds=_pending_auth_ttl_seconds),
@@ -78,4 +78,4 @@ async def get_session_payload(session_token: str, session: AsyncSession = Depend
         return JSONResponse(status_code=404, content={"error": "session not found or expired"})
     await session.delete(payload)
     await session.commit()
-    return {"steamid": payload.steamid, "games": payload.games}
+    return {"steamid": payload.id, "games": payload.games}

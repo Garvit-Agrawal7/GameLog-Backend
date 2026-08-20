@@ -68,7 +68,7 @@ class PendingAuthPayload(Base):
     __tablename__ = "pending_auth_payloads"
 
     session_token: Mapped[str] = mapped_column(String(64), primary_key=True)
-    steamid: Mapped[str] = mapped_column(String(32), nullable=False)
+    id: Mapped[str] = mapped_column(String(32), nullable=False)
     games: Mapped[list] = mapped_column(JSON, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
