@@ -5,6 +5,8 @@ from app.database import get_async_session
 from app.rate_limit import allow_default_request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import xbox_servb
+
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -38,8 +40,7 @@ async def xbox_callback(request: Request, session: AsyncSession = Depends(get_as
             content={"error": "Xbox login failed, please try again later"},
         )
 
-    app_key = user_details.app_key
-    xuid = user_details.xuid
+
     
 
     return JSONResponse(content={"message": "xbox callback received", "profile": user_details})

@@ -76,17 +76,19 @@ class SteamService:
             "games": trimmed_games,
         }
 
-    async def get_player_summaries(self, steam_id: str) -> dict:
-        url = "/ISteamUser/GetPlayerSummaries/v0002/"
-        params = {"key": self._api_key, "steamids": steam_id}
-        try:
-            response = await self._client.get(url, params=params)
-            response.raise_for_status()
-            return response.json()
-        except Exception as e:
-            raise Exception(f"Failed to load player summaries: {e}")
+    # async def get_player_summaries(self, steam_id: str) -> dict:
+    #     """Return player summaries for a steam id."""
+    #     url = "/ISteamUser/GetPlayerSummaries/v0002/"
+    #     params = {"key": self._api_key, "steamids": steam_id}
+    #     try:
+    #         response = await self._client.get(url, params=params)
+    #         response.raise_for_status()
+    #         return response.json()
+    #     except Exception as e:
+    #         raise Exception(f"Failed to load player summaries: {e}")
 
     async def get_owned_games(self, steam_id: str) -> dict:
+        """Returns all user's owned games, and free games, and formats them together."""
         owned_games_params = {
             "key": self._api_key,
             "steamid": steam_id,
