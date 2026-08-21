@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.config import settings
 from app.database import get_async_session
@@ -65,3 +66,18 @@ async def steam_callback(request: Request, session: AsyncSession = Depends(get_a
     await session.commit()
 
     return RedirectResponse(url=f"{settings.frontend_url}auth/complete#session={session_token}")
+
+@router.get("/session/{session_token}")
+async def get_session_payload(session_token: str, session: AsyncSession = Depends(get_async_session)):
+    result = await session.execute(select(PendingAuthPayload).where(PendingAuthPayload.session_token == session_token))
+    payload = result.scalar_one_or_none()
+    if payload is None:
+        return JSONResponse(status_code=404, content={"error": "session not found or expired"})
+    if payload.expires_at <= datetime.now(UTC):
+        await session.delete(payload)
+        await session.commit()
+        return JSONResponse(status_code=404, content={"error": "session not found or expired"})
+    await session.delete(payload)
+    await session.commit()
+
+    return {"id": payload.id, "provider": payload.provider, "games": payload.games}
