@@ -19,7 +19,10 @@ class XboxAuth:
                 claim_resp = await client.post(
                     self.xbox_url + "/app/claim",
                     json={"code": code, "app_key": self.app_key},
-                    headers={"Content-Type": "application/json"},
+                    headers={
+                            "Content-Type": "application/json",
+                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                        },
                 )
         except httpx.TimeoutException:
             raise ValueError("xbox claim request timed out")
