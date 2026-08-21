@@ -5,13 +5,14 @@ import asyncio
 import contextlib
 from contextlib import asynccontextmanager
 import logging
+import httpx
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import steam_routes, igdb_routes, auth_routes, database_routes, xbox_routes
 from app.cleanup import cleanup_expired_auth_rows
 from app.database import Base, engine
-from app import models  # noqa: F401
+from app import models
 from app.rate_limit import rate_limiter
 
 
@@ -67,3 +68,9 @@ app.include_router(xbox_routes.router)
 @app.get("/")
 async def root():
     return {"message": "Game Library Backend", "status": "running"}
+
+@app.get("/debug/outbound-ip")
+async def debug_outbound_ip():
+    async with httpx.AsyncClient() as client:
+        resp = await client.get("https://api.ipify.org?format=json")
+        return resp.json()
