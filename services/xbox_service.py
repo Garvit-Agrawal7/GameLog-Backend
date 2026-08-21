@@ -8,7 +8,7 @@ class XboxService:
         self.api_key = settings.xbox_api_key
         self._client = httpx.Client(base_url=self.BASE_URL)
 
-    async def get_owned_games(self, xuid: str) -> dict:
+    async def get_owned_games(self, xuid: str) -> list:
         async with httpx.AsyncClient() as client:
             resp = await client.get(
                 f"https://api.xbl.io/v2/titles/{xuid}",

@@ -69,6 +69,7 @@ async def xbox_callback(request: Request, session: AsyncSession = Depends(get_as
         PendingAuthPayload(
             session_token=session_token,
             id=xuid,
+            provider="xbox",
             games=matched_games,
             created_at=datetime.now(UTC),
             expires_at=datetime.now(UTC) + timedelta(seconds=_pending_auth_ttl_seconds),

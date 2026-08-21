@@ -170,17 +170,18 @@ class IGDBService:
         games = await self._post("/games", igdb_query)
         return self._calculate_rating_order(games, minimum_votes=50)[:limit]
 
-
     async def multiquery_games(self, seeds: list[dict]) -> list[dict]:
         """
-        Batch-fetch IGDB data for Steam game seeds via IGDB's multiquery
-        endpoint, chunked to stay under IGDB's per-request sub-query limit.
+        Batch-fetch IGDB data for game seeds (Steam or Xbox shape) via IGDB's
+        multiquery endpoint, chunked to stay under IGDB's per-request sub-query
+        limit. Xbox seeds have no playtime field, so time-to-beat is fetched
+        per matched title as a stand-in estimate.
         """
         chunk_size = 10
         if not seeds:
             return []
         if not settings.igdb_client_id or not settings.igdb_client_secret:
-            return [{"steam_name": seed.get("name"), "playtime_forever": seed.get("playtime_forever"), "rtime_last_played": seed.get("rtime_last_played"), "igdb_id": None} for seed in seeds if isinstance(seed, dict)]
+            return [self._build_unmatched_result(seed) for seed in seeds if isinstance(seed, dict)]
 
         all_results: list[dict] = []
         for chunk_start in range(0, len(seeds), chunk_size):
@@ -201,21 +202,34 @@ class IGDBService:
                 )
 
             multiquery_body = "\n".join(query_blocks)
-
             chunk_results = await self._post("/multiquery", multiquery_body)
 
+            chunk_matches: list[tuple[dict, dict | None]] = []
             for i, seed in enumerate(chunk):
                 result_block = next((r for r in chunk_results if r.get("name") == str(i)), None)
                 candidates = result_block.get("result", []) if result_block else []
-
                 game = self._pick_best_match(seed["name"], candidates)
+                chunk_matches.append((seed, game))
+
+            time_to_beat_tasks = [
+                self.fetch_time_to_beat(game["id"])
+                if game and self._is_xbox_seed(seed) and game.get("id") is not None
+                else None
+                for seed, game in chunk_matches
+            ]
+            time_to_beat_results = await asyncio.gather(
+                *(task for task in time_to_beat_tasks if task is not None)
+            )
+            time_to_beat_iter = iter(time_to_beat_results)
+
+            for (seed, game), ttb_task in zip(chunk_matches, time_to_beat_tasks):
+                time_to_beat_hours = next(time_to_beat_iter) if ttb_task is not None else None
 
                 if game:
                     cover_id = self._read_cover_id(game)
-                    all_results.append({
-                        "steam_name": seed["name"],
-                        "playtime_forever": seed.get("playtime_forever"),
-                        "rtime_last_played": seed.get("rtime_last_played"),
+                    result = {
+                        **self._seed_playtime_fields(seed, time_to_beat_hours),
+                        "provider_name": seed["name"],
                         "igdb_id": game.get("id"),
                         "igdb_name": game.get("name"),
                         "cover_url": self._cover_url(cover_id) if cover_id else None,
@@ -223,14 +237,10 @@ class IGDBService:
                         "genres": self._read_genres(game),
                         "release_date": game.get("first_release_date"),
                         "rating": game.get("rating"),
-                    })
+                    }
+                    all_results.append(result)
                 else:
-                    all_results.append({
-                        "steam_name": seed["name"],
-                        "playtime_forever": seed.get("playtime_forever"),
-                        "rtime_last_played": seed.get("rtime_last_played"),
-                        "igdb_id": None,
-                    })
+                    all_results.append(self._build_unmatched_result(seed))
 
         return all_results
 
@@ -387,9 +397,9 @@ class IGDBService:
 
         return best_match if best_score >= 60 else None
 
+    @staticmethod
     def _calculate_rating_order(
-        self,
-        games: list[dict[str, Any]],
+            games: list[dict[str, Any]],
         minimum_votes: int = 100,
     ) -> list[dict[str, Any]]:
         if not games:
@@ -409,7 +419,8 @@ class IGDBService:
         scored.sort(key=lambda item: item[1], reverse=True)
         return [item[0] for item in scored]
 
-    def _score_title_match(self, target: str, candidate: str, release_date: Any) -> int:
+    @staticmethod
+    def _score_title_match(target: str, candidate: str, release_date: Any) -> int:
         if candidate == target:
             return 1000
 
@@ -429,7 +440,8 @@ class IGDBService:
 
         return score
 
-    def _normalize_title(self, input_value: str) -> str:
+    @staticmethod
+    def _normalize_title(input_value: str) -> str:
         replacements = {
             "à": "a",
             "á": "a",
@@ -469,14 +481,16 @@ class IGDBService:
 
         return " ".join("".join(buffer).split())
 
-    def _read_cover_id(self, data: dict[str, Any]) -> str | None:
+    @staticmethod
+    def _read_cover_id(data: dict[str, Any]) -> str | None:
         cover = data.get("cover")
         if isinstance(cover, dict):
             value = cover.get("image_id")
             return value if isinstance(value, str) else None
         return None
 
-    def _read_genres(self, data: dict[str, Any]) -> list[str]:
+    @staticmethod
+    def _read_genres(data: dict[str, Any]) -> list[str]:
         raw = data.get("genres")
         if not isinstance(raw, list):
             return []
@@ -490,18 +504,55 @@ class IGDBService:
                 genres.append(name)
         return genres
 
-    def _read_rating(self, data: dict[str, Any]) -> float | None:
+    @staticmethod
+    def _read_rating(data: dict[str, Any]) -> float | None:
         rating = data.get("rating")
         return float(rating) if isinstance(rating, (int, float)) else None
 
-    def _read_year(self, data: dict[str, Any]) -> int | None:
+    @staticmethod
+    def _read_year(data: dict[str, Any]) -> int | None:
         release = data.get("first_release_date")
         if isinstance(release, int):
             return dt.datetime.fromtimestamp(release).year
         return None
 
-    def _cover_url(self, image_id: str) -> str:
+    @staticmethod
+    def _cover_url(image_id: str) -> str:
         return f"https://images.igdb.com/igdb/image/upload/t_720p/{image_id}.jpg"
 
+    @staticmethod
+    def _is_xbox_seed(seed: dict) -> bool:
+        """Xbox seeds carry 'lastTimePlayed'/'progressPercentage'; Steam seeds carry 'playtime_forever'."""
+        return "playtime_forever" not in seed and "lastTimePlayed" in seed
+
+    def _seed_playtime_fields(self, seed: dict, time_to_beat_hours: int | None = None) -> dict:
+        if self._is_xbox_seed(seed):
+            return {
+                "playtime_forever": time_to_beat_hours if time_to_beat_hours is not None else None,
+                "rtime_last_played": self._parse_xbox_timestamp(seed.get("lastTimePlayed")),
+                "progress_percentage": seed.get("progressPercentage"),
+                "current_achievements": seed.get("currentAchievements"),
+                "total_achievements": seed.get("totalAchievements"),
+            }
+        return {
+            "playtime_forever": seed.get("playtime_forever"),
+            "rtime_last_played": seed.get("rtime_last_played"),
+        }
+
+    @staticmethod
+    def _parse_xbox_timestamp(value: str | None) -> int | None:
+        if not value:
+            return None
+        try:
+            return int(dt.datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp())
+        except ValueError:
+            return None
+
+    def _build_unmatched_result(self, seed: dict) -> dict:
+        return {
+            **self._seed_playtime_fields(seed),
+            "provider_name": seed.get("name"),
+            "igdb_id": None,
+        }
 
 igdb_service = IGDBService()
