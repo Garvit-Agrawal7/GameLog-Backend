@@ -35,3 +35,5 @@ class XboxAuth:
             raise ValueError(
                 f"xbox claim returned non-JSON body: status={claim_resp.status_code} body={claim_resp.text[:500]}"
             )
+
+xbox_auth = XboxAuth()
