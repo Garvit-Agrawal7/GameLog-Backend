@@ -45,7 +45,7 @@ async def xbox_callback(request: Request, session: AsyncSession = Depends(get_as
             )
         return JSONResponse(
             status_code=400,
-            content={"error": "Xbox login failed, please try again later"},
+            content={"error": "Xbox login failed, please try again later", "detail": msg},
         )
 
     xuid = user_details["xuid"]
