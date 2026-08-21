@@ -7,7 +7,7 @@ class XboxAuth:
         self.app_key = settings.xbox_app_key
         self.api_key: str = settings.xbox_api_key
         self.public_key: str = settings.xbox_public_key
-        self.xbox_url: str = f"https://api.xbl.io"
+        self.xbox_url: str = "https://api.xbl.io"
 
     def get_login_url(self) -> str:
         return self.xbox_url + f"/app/auth/{self.public_key}"
@@ -24,9 +24,14 @@ class XboxAuth:
         except httpx.TimeoutException:
             raise ValueError("xbox claim request timed out")
 
-        if claim_resp.status_code == 400:
-            raise ValueError(f"xbox claim failed: {claim_resp.text}")
+        if claim_resp.status_code != 200:
+            raise ValueError(
+                f"xbox claim failed: status={claim_resp.status_code} body={claim_resp.text[:500]}"
+            )
 
-        return claim_resp.json()
-
-xbox_auth = XboxAuth()
+        try:
+            return claim_resp.json()
+        except ValueError:
+            raise ValueError(
+                f"xbox claim returned non-JSON body: status={claim_resp.status_code} body={claim_resp.text[:500]}"
+            )
