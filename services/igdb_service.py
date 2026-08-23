@@ -160,8 +160,6 @@ class IGDBService:
         if not settings.igdb_client_id or not settings.igdb_client_secret:
             return []
             
-        if limit > 50: limit = 50    # Temporary fix for high latency
-            
         escaped_genre = trimmed_genre.replace('"', '\\"')
         igdb_query = (
             'fields name,summary,cover.image_id,genres.name,first_release_date,rating,rating_count; '
