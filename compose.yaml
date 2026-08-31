@@ -2,16 +2,20 @@ services:
   backend:
     build: .
     env_file: .env
+    environment:
+      PORT: ${PORT:-8000}
     ports:
       - "${PORT:-8000}:${PORT:-8000}"
     restart: unless-stopped
 
   nginx:
     image: nginx:alpine
+    environment:
+      PORT: ${PORT:-8000}
     ports:
       - "80:80"
     volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/default.conf:/etc/nginx/templates/default.conf.template:ro
     depends_on:
       - backend
     restart: unless-stopped
