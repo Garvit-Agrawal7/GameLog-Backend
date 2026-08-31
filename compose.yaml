@@ -4,8 +4,6 @@ services:
     env_file: .env
     environment:
       PORT: ${PORT:-8000}
-    ports:
-      - "${PORT:-8000}:${PORT:-8000}"
     restart: unless-stopped
 
   nginx:
