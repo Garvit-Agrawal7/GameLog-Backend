@@ -1,11 +1,23 @@
 services:
-  backend:
+  backend1:
     build: .
     env_file: .env
     environment:
       PORT: ${PORT:-8000}
-    ports:
-      - "${PORT:-8000}:${PORT:-8000}"
+    restart: unless-stopped
+
+  backend2:
+    build: .
+    env_file: .env
+    environment:
+      PORT: ${PORT:-8000}
+    restart: unless-stopped
+
+  backend3:
+    build: .
+    env_file: .env
+    environment:
+      PORT: ${PORT:-8000}
     restart: unless-stopped
 
   nginx:
@@ -17,5 +29,7 @@ services:
     volumes:
       - ./nginx/default.conf:/etc/nginx/templates/default.conf.template:ro
     depends_on:
-      - backend
+      - backend1
+      - backend2
+      - backend3
     restart: unless-stopped
