@@ -68,9 +68,3 @@ app.include_router(xbox_routes.router)
 @app.get("/")
 async def root():
     return {"message": "Game Library Backend", "status": "running"}
-
-@app.get("/debug/outbound-ip")
-async def debug_outbound_ip():
-    async with httpx.AsyncClient() as client:
-        resp = await client.get("https://api.ipify.org?format=json")
-        return resp.json()
