@@ -15,6 +15,8 @@ from app.database import Base, engine
 from app import models
 from app.rate_limit import rate_limiter
 
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
 
 logger = logging.getLogger(__name__)
 async def _ensure_database_schema() -> None:
@@ -68,3 +70,6 @@ app.include_router(xbox_routes.router)
 @app.get("/")
 async def root():
     return {"message": "Game Library Backend", "status": "running"}
+
+app = ProxyHeadersMiddleware(app, trusted_hosts="*")
+
